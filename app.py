@@ -1,67 +1,84 @@
-import pandas as pd
 import dash
-from dash import dcc, html
+from dash import dcc, html, Input, Output
+import pandas as pd
 import plotly.express as px
 
-# Load the formatted data
+# Load and prepare the data
 df = pd.read_csv("formatted_sales_data.csv")
+df["date"] = pd.to_datetime(df["date"])
 
-# Convert 'date' column to datetime type
-df['date'] = pd.to_datetime(df['date'])
-
-# Sort data by date
-df = df.sort_values(by='date')
-
-# Group by date to get total sales per day
-daily_sales = df.groupby('date')['sales'].sum().reset_index()
-
-# Create the line chart
-fig = px.line(
-    daily_sales,
-    x='date',
-    y='sales',
-    title='Pink Morsel Sales Over Time',
-    labels={'date': 'Date', 'sales': 'Total Sales ($)'},
-)
-
-# Add a vertical line to mark the price increase date
-fig.add_shape(
-    type="line",
-    x0="2021-01-15",
-    y0=0,
-    x1="2021-01-15",
-    y1=daily_sales['sales'].max(),
-    line=dict(
-        color="red",
-        width=2,
-        dash="dash",
-    ),
-)
-
-# Add an annotation for clarity
-fig.add_annotation(
-    x="2021-01-15",
-    y=daily_sales['sales'].max(),
-    text="Price Increase",
-    showarrow=True,
-    arrowhead=1,
-    ax=0,
-    ay=-40
-)
-
-
-# Create Dash app
+# Initialize the app
 app = dash.Dash(__name__)
-app.title = "Pink Morsel Sales Visualiser"
 
-app.layout = html.Div(children=[
-    html.H1("Pink Morsel Sales Visualiser", style={'textAlign': 'center'}),
+# App layout
+app.layout = html.Div(style={"fontFamily": "Arial, sans-serif", "padding": "40px"}, children=[
+    html.H1("📈 Pink Morsel Sales Dashboard", style={"textAlign": "center", "color": "#AA336A"}),
 
-    dcc.Graph(
-        id='sales-line-chart',
-        figure=fig
-    )
+    html.Div([
+        html.Label("Filter by Region:", style={"fontSize": "18px", "marginBottom": "10px"}),
+        dcc.RadioItems(
+            id="region-selector",
+            options=[
+                {"label": "North", "value": "north"},
+                {"label": "East", "value": "east"},
+                {"label": "South", "value": "south"},
+                {"label": "West", "value": "west"},
+                {"label": "All Regions", "value": "all"}
+            ],
+            value="all",
+            labelStyle={"display": "inline-block", "margin-right": "15px"},
+            inputStyle={"margin-right": "6px"},
+            style={"marginBottom": "30px"}
+        )
+    ], style={"textAlign": "center"}),
+
+    dcc.Graph(id="sales-graph")
 ])
 
-if __name__ == '__main__':
+# Callback to update the chart
+@app.callback(
+    Output("sales-graph", "figure"),
+    Input("region-selector", "value")
+)
+def update_graph(selected_region):
+    if selected_region == "all":
+        filtered_df = df
+    else:
+        filtered_df = df[df["region"] == selected_region]
+
+    fig = px.line(
+        filtered_df,
+        x="date",
+        y="sales",
+        color="region" if selected_region == "all" else None,
+        title="Pink Morsel Sales Over Time"
+    )
+
+    # Add vertical line for price increase
+    fig.add_vline(
+        x=pd.to_datetime("2021-01-15"),
+        line_dash="dash",
+        line_color="red"
+    )
+    fig.add_annotation(
+        x=pd.to_datetime("2021-01-15"),
+        y=max(filtered_df["sales"]),
+        text="Price Increase",
+        showarrow=True,
+        arrowhead=1
+    )
+
+    # Aesthetic tweaks
+    fig.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Sales",
+        template="plotly_white",
+        font=dict(family="Arial", size=14),
+        title_x=0.5
+    )
+
+    return fig
+
+# Run the server
+if __name__ == "__main__":
     app.run(debug=True)
